@@ -4,13 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/joho/godotenv"
 )
 
-var JwtSecret = []byte("supersecretkey")
+var JwtSecret []byte
+
+func LoadEnv() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found")
+	}
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		log.Fatal("JWT_SECRET is not set")
+	}
+
+	JwtSecret = []byte(secret)
+}
 
 func WriteJSONError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")

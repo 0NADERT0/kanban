@@ -14,6 +14,7 @@ import (
 )
 
 func main() {
+	middleware.LoadEnv()
 	db.InitDB()
 
 	r := mux.NewRouter()
