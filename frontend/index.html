@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kanban Board</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f8fa; margin: 0; }
+    #auth-container, #board { max-width: 1200px; margin: auto; padding: 20px; }
+    #board { display: flex; flex-direction: column; }
+    #top-bar { display: flex; justify-content: flex-end; margin-bottom: 15px; }
+    #columns { display: flex; gap: 20px; }
+    .column { background: #fff; border-radius: 10px; padding: 15px; flex: 1;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+    .column h3 { margin: 0 0 10px; padding-bottom: 5px; border-bottom: 2px solid #2196f3; text-align: center; }
+    .card { background: #e3f2fd; padding: 10px; margin: 8px 0; border-radius: 6px; cursor: grab; position: relative; }
+    .card button { position: absolute; right: 5px; top: 5px; border: none; background: none; font-size: 16px; cursor: pointer; color: #666; }
+    .add-card-form { margin-top: auto; }
+    .add-card-form input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+    #logout-btn { background: #d32f2f; color: white; border: none; padding: 10px 20px;
+                  border-radius: 6px; cursor: pointer; }
+    form { margin: 10px 0; }
+    input, button { font-size: 14px; }
+  </style>
+</head>
+<body>
+  <!-- Auth container -->
+  <div id="auth-container">
+    <h2>Login</h2>
+    <form id="login-form">
+      <input type="text" name="username" placeholder="Username" required><br>
+      <input type="password" name="password" placeholder="Password" required><br>
+      <button type="submit">Login</button>
+    </form>
+
+    <h2>Register</h2>
+    <form id="register-form">
+      <input type="text" name="username" placeholder="Username" required><br>
+      <input type="password" name="password" placeholder="Password" required><br>
+      <button type="submit">Register</button>
+    </form>
+  </div>
+
+  <!-- Board -->
+  <div id="board" style="display:none;">
+    <div id="top-bar">
+      <button id="logout-btn">Выйти</button>
+    </div>
+    <div id="columns"></div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:8080";
+    const tokenKey = "jwt_token";
+    const authContainer = document.getElementById("auth-container");
+    const boardEl = document.getElementById("board");
+    const columnsEl = document.getElementById("columns");
+    const loginForm = document.getElementById("login-form");
+    const registerForm = document.getElementById("register-form");
+    const logoutBtn = document.getElementById("logout-btn");
+    let boardData = null;
+
+    // --- Show login or board ---
+    if (localStorage.getItem(tokenKey)) {
+      showBoard();
+      loadBoard();
+    }
+
+    function showAuth() { authContainer.style.display="block"; boardEl.style.display="none"; }
+    function showBoard() { authContainer.style.display="none"; boardEl.style.display="flex"; }
+
+    // --- Auth ---
+    loginForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const u = loginForm.username.value, p = loginForm.password.value;
+      const res = await fetch(API_BASE+"/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})});
+      const data = await res.json();
+      if (res.ok) { localStorage.setItem(tokenKey,data.token); showBoard(); loadBoard(); }
+      else alert(data.error||"Login failed");
+    };
+
+    registerForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const u = registerForm.username.value, p = registerForm.password.value;
+      const res = await fetch(API_BASE+"/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})});
+      const data = await res.json();
+      if (res.ok) alert("Registered! Now login."); else alert(data.error||"Register failed");
+    };
+
+    logoutBtn.onclick = ()=>{ localStorage.removeItem(tokenKey); showAuth(); };
+
+    // --- Board ---
+    async function loadBoard(){
+      const res = await fetch(API_BASE+"/board",{headers:{Authorization:"Bearer "+localStorage.getItem(tokenKey)}});
+      const data = await res.json();
+      if(res.ok){ boardData=data; renderBoard(); } else { alert(data.error||"Failed"); }
+    }
+
+    function renderBoard(){
+      columnsEl.innerHTML="";
+      boardData.columns.forEach(col=>{
+        const colEl=document.createElement("div"); colEl.className="column"; colEl.dataset.columnId=col.id;
+        colEl.innerHTML=`<h3>${col.title}</h3>`;
+        (col.cards||[]).forEach(c=>colEl.appendChild(createCard(c,col.id)));
+        colEl.appendChild(createAddForm(col.id));
+        colEl.ondragover=e=>e.preventDefault();
+        colEl.ondrop=e=>handleDrop(e,col.id);
+        columnsEl.appendChild(colEl);
+      });
+    }
+
+    function createCard(card,columnId){
+      const el=document.createElement("div"); el.className="card"; el.draggable=true; el.dataset.cardId=card.id;
+      el.textContent=card.title;
+      const btn=document.createElement("button"); btn.textContent="×"; btn.onclick=()=>deleteCard(card.id,columnId);
+      el.appendChild(btn);
+      el.ondragstart=e=>e.dataTransfer.setData("json",JSON.stringify({cardId:card.id,from:columnId}));
+      return el;
+    }
+
+    function createAddForm(colId){
+      const form=document.createElement("form"); form.className="add-card-form";
+      form.innerHTML='<input placeholder="Add a card..." required>';
+      form.onsubmit=async e=>{
+        e.preventDefault();
+        const title=form.querySelector("input").value.trim(); if(!title) return;
+        const res=await fetch(API_BASE+"/cards",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+localStorage.getItem(tokenKey)},body:JSON.stringify({title,column_id:colId})});
+        const data=await res.json();
+        if(res.ok){ form.parentElement.insertBefore(createCard(data,colId),form); form.reset(); }
+        else alert(data.error||"Add failed");
+      };
+      return form;
+    }
+
+    async function handleDrop(e,toCol){
+      const d=JSON.parse(e.dataTransfer.getData("json"));
+      if(d.from===toCol) return;
+      const res=await fetch(API_BASE+"/cards/"+d.cardId,{method:"PUT",headers:{"Content-Type":"application/json",Authorization:"Bearer "+localStorage.getItem(tokenKey)},body:JSON.stringify({column_id:toCol})});
+      if(res.ok) loadBoard();
+    }
+
+    async function deleteCard(id,col){
+      const res=await fetch(API_BASE+"/cards/"+id,{method:"DELETE",headers:{Authorization:"Bearer "+localStorage.getItem(tokenKey)}});
+      if(res.ok){ document.querySelector(`[data-card-id="${id}"]`).remove(); }
+    }
+  </script>
+</body>
+</html>

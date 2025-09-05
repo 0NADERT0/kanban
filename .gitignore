@@ -1,0 +1,24 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+/bin/
+/obj/
+/dist/
+/build/
+
+# Go stuff
+*.test
+*.out
+
+# IDE / Editor stuff
+.vscode/
+.idea/
+*.swp
+
+# Env files
+.env
